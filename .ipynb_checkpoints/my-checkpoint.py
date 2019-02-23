@@ -16,7 +16,7 @@ def model_r_init(model_names, dataset=["training","test"], n_cell=1):
         # initialization 1 - dict + zip(keys, values[0,0,..0])
         # initialization 2 - {key:value for key[0] in ...}
         model_r[i] = {key:dict(zip(model_names, values)) for key in dataset}
-
+        
     return model_r
 
 # models
@@ -26,7 +26,7 @@ class SimpleModel(nn.Module):
         # D_out: # of cells (or ROIs)
         super(SimpleModel, self).__init__()
         self.conv = nn.Conv2d(D_stim[0], D_out,  kernel_size = D_stim[1:])
-
+        
     def forward(self, x):
         x = self.conv(x)
         x = x.view(x.size(0), -1)    # x.size(0) = batch number
@@ -43,18 +43,18 @@ class LN_TemConv(nn.Module):
         # D_stim : [ch, dim1, dim2] e.g. [color, space, time]
         #     H  : num of layer1 channels
         # D_out  : num of cells (or ROIs)
-
+        
         max_space_filtering    = D_stim[1] # conv over entire space
         k1 = [max_space_filtering, temp_filter_size] # subunit spatiotemporal filter. # [space, time] ~ [40*7 um, (1/15Hz)*6=400 ms]
         #k2 = [D_stim[1]-max_space_filtering+1, temp_filter_size] # filter for integrating subunits.
         k2 = [D_stim[1]-max_space_filtering+1, D_stim[2]-temp_filter_size+1] # filter for integrating subunits.
 
         super(LN_TemConv, self).__init__()
-        self.relu = nn.ReLU(inplace=True) # inplace=True: update the input directly.
+        self.relu = nn.ReLU(inplace=True) # inplace=True: update the input directly. 
         self.softplus = nn.Softplus()
         self.conv1 = nn.Conv2d(D_stim[0], H, kernel_size = k1)
         self.conv2 = nn.Conv2d(H,     D_out, kernel_size = k2) # equivalent to FC layer.
-
+        
     def forward(self, x):
         x = self.conv1(x)
         x = self.softplus(x)   # rectifying nonlinearity.
@@ -70,9 +70,9 @@ class CNN_2layer(nn.Module):
 # 2-layer model: Conv1 + Conv2(= FC)
     def __init__(self, D_stim, H, D_out, temp_filter_size = 15, space_filter_size = 7, space_stride=1):
         # D_stim : [ch, dim1, dim2] e.g. [color, space, time]
-        #     H  : num of channels (types in conv1 layer)
+        #     H  : num of channels (types in conv1 layer) 
         # D_out  : num of cells (or ROIs)
-
+        
         max_space_filtering    = space_filter_size;
         max_temporal_filtering = temp_filter_size;
         # filter size as tuple
@@ -85,11 +85,11 @@ class CNN_2layer(nn.Module):
 
         super(CNN_2layer, self).__init__()
         self.name = 'CNN_2layer'
-        self.relu = nn.ReLU(inplace=True) # inplace=True: update the input directly.
+        self.relu = nn.ReLU(inplace=True) # inplace=True: update the input directly. 
         self.softplus = nn.Softplus()
         self.conv1 = nn.Conv2d(D_stim[0], H, k1, stride = (space_stride, 1))
         self.conv2 = nn.Conv2d(H,     D_out, k2, stride = 1) # equivalent to FC layer.
-
+        
     def forward(self, x):
         x = self.conv1(x)
         x = self.softplus(x)     # rectifying nonlinearity.
@@ -100,8 +100,8 @@ class CNN_2layer(nn.Module):
         x = x.view(x.size(0), -1)
         x = torch.tanh(x)
         return x
-
-
+    
+    
 #__all__ = []
 
 # Function for rev correlation (rolled_stim, output)
@@ -120,39 +120,39 @@ def corr_with_rolled_stim(rolled_stim, output):
     for cell in range(output.shape[1]):
         for t in range(output.shape[0]):
             corr[cell] += rolled_stim[t] * output[t, cell]
-
+            
     return corr
 
 # Function for RF visualization
 def rf_imshow(rf_data):
     # [cell id, dim1, dim2, ...]
-
+    
     if rf_data.ndim is 2:
         # single cell case
         rf_data = rf_data[None, :]
-
+        
     numcell = rf_data.shape[0]
     for cell in range(numcell):
         rf = rf_data[cell]
-        c_limit = max([abs(rf.min()), abs(rf.max())])
+        c_limit = max([abs(rf.min()), abs(rf.max())])  
         #plt.subplot(1, numcell, cell+1)
         plt.imshow(rf, aspect='auto', cmap='seismic', vmin = -c_limit, vmax = c_limit)
         cbar = plt.colorbar(ticks=[-c_limit, c_limit])
-        cbar.ax.set_yticklabels(['-', '+'])
+        cbar.ax.set_yticklabels(['-', '+']) 
         #plt.title('cell: %d' %(cell))
-
-
+        
+        
 # 4D tensor visualization for pytorch model
 # (out_ch, in_ch, dim1, dim2)
 def plot_kernels_in_ch_cols(tensor):
     num_rows = tensor.shape[0]
-    num_cols = tensor.shape[1]
+    num_cols = tensor.shape[1]    
     fig = plt.figure()
     #fig.patch.set_facecolor((1, 1, 1))
-    for i in range(num_rows):     # over out channels
+    for i in range(num_rows):     # over out channels 
         # set limit
-        c_limit = max([abs(tensor[i].min()), abs(tensor[i].max())])
-
+        c_limit = max([abs(tensor[i].min()), abs(tensor[i].max())])  
+        
         for j in range(num_cols): # over  in channels
             ax1 = plt.subplot(num_rows, num_cols, i*num_cols + j + 1)
             rf_imshow(tensor[i,j])
@@ -162,8 +162,8 @@ def plot_kernels_in_ch_cols(tensor):
             ax1.set_yticklabels([])
 
     plt.subplots_adjust(wspace=0.1, hspace=0.1)
-    plt.show()
-
+    plt.show() 
+    
 def plot_kernels_out_ch_cols(tensor):
 # (out_ch, in_ch, dim1, dim2)
 # plot out channels into cols
@@ -178,13 +178,13 @@ def plot_kernels_out_ch_cols(tensor):
             #ax1.imshow(tensor[i,j])
             ax1.axis('off')
             ax1.set_xticklabels([])
-            ax1.set_yticklabels([])
-
-def model_r_bar_plot(model_r, dataset=None, models=None):
+            ax1.set_yticklabels([])    
+                                 
+def model_r_bar_plot(model_r, dataset=None, models=None): 
     # model_r [cell index] [data set] [model_name]
     # loop over cell id > data set > model type
     # color depends on only model type
-
+        
     bar_width = 0.48
     margin_dataset = 0.15
     margin_cell = 0.5
@@ -196,16 +196,16 @@ def model_r_bar_plot(model_r, dataset=None, models=None):
     n_color = len(new_colors)
     #
     fig, ax = plt.subplots(figsize=(n_cell*2, 3))
-
+    
     for i in range(n_cell):
-
+        
         if dataset is None:
-            dataset = model_r[i].keys()
+            dataset = model_r[i].keys()    
         if not isinstance(dataset, (list,)):
             print('dataset argument should be ''list'', not ''str''. Try with [].')
         n_dataset = len(dataset)
-        j = 0 # dataset
-
+        j = 0 # dataset 
+        
         #for dataset in model_r[i].keys():
         for d in dataset:
 
@@ -213,24 +213,23 @@ def model_r_bar_plot(model_r, dataset=None, models=None):
                 models = model_r[i][d].keys()
             if not isinstance(models, (list,)):
                 print('models argument should be ''list'', not ''str''. Try with [].')
-
-            n_model = len(models)
-            k = 0 # model index
-
+            n_model   = len(models)
+            k = 0 # model index   
+            
             for model in models:
-
+                
                 model_spacing = 0.5
                 dataset_spacing = n_model * model_spacing  + margin_dataset
                 cell_spacing = n_dataset * dataset_spacing + margin_cell
-
+                
                 plt.bar(i*cell_spacing + j*dataset_spacing + k*model_spacing + margin_cell/2. + margin_dataset/2., model_r[i][d][model], bar_width, color=new_colors[k%n_color])
                 k += 1
             #
             j += 1
-        #
-    #print('%s' % dataset) # of last cell
-    #print('%s' % models)  # of last cell & last dataset
-
+        #    
+    print('%s' % dataset) # of last cell
+    print('%s' % models)  # of last cell & last dataset
+    
     ax.set_ylabel('Correlation', fontsize=fsize)
     ybottom, ytop = plt.ylim()
     ax.set_ylim(top = ytop + 0.03)
@@ -241,7 +240,7 @@ def model_r_bar_plot(model_r, dataset=None, models=None):
     ax.tick_params(axis='both', labelsize=fsize)
     ax.tick_params(axis='x', length=0)
     ax.yaxis.grid()
-    plt.title('%s models on %s dataset' % (models, dataset))
+    plt.title(tuple(models))
     #
     return ax
 
@@ -253,8 +252,8 @@ def model_r_bar_plot(model_r, dataset=None, models=None):
     #ax.tick_params(axis='both', labelsize=fsize)
     #ax.tick_params(axis='x', length=0)
     #ax.yaxis.grid()
-
-def figure_setting():
+    
+def figure_setting():    
     # Figure setting
     plt.rcParams['figure.figsize'] = [5, 3]
     # plot style test
