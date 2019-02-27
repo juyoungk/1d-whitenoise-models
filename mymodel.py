@@ -36,6 +36,7 @@ class LN_TemConv(nn.Module):
         k2 = [D_stim[1]-max_space_filtering+1, D_stim[2]-temp_filter_size+1] # filter for integrating subunits.
 
         super(LN_TemConv, self).__init__()
+        self.name = 'LN_TemConv'
         self.relu = nn.ReLU(inplace=True) # inplace=True: update the input directly.
         self.softplus = nn.Softplus()
         self.conv1 = nn.Conv2d(D_stim[0], H, kernel_size = k1)
@@ -53,7 +54,7 @@ class LN_TemConv(nn.Module):
         return x
 
 class CNN_2layer(nn.Module):
-# 2-layer model: Conv1 + Conv2(= FC)
+# 2-layer model: Conv1 + Conv2 (= FC)
     def __init__(self, D_stim, H, D_out, temp_filter_size = 15, space_filter_size = 7, space_stride=1):
         # D_stim : [ch, dim1, dim2] e.g. [color, space, time]
         #     H  : num of channels (types in conv1 layer)

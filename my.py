@@ -4,8 +4,10 @@ Juyoung's data analysis functions
 
 import numpy as np
 import matplotlib.pyplot as plt
-import torch
-import torch.nn as nn
+import pyret.filtertools as ft
+from pyret.nonlinearities import Binterp, RBF, Sigmoid
+from scipy.stats import sem, pearsonr
+
 
 def model_r_init(model_names, dataset=["training","test"], n_cell=1):
 # argument: model_names, dataset=["training","test"], n_cell=1
@@ -19,87 +21,96 @@ def model_r_init(model_names, dataset=["training","test"], n_cell=1):
 
     return model_r
 
-# models
-class SimpleModel(nn.Module):
-    def __init__(self, D_stim, D_out):
-        # D_stim : [ch, dim1, dim2] e.g. [color, space, time]
-        # D_out: # of cells (or ROIs)
-        super(SimpleModel, self).__init__()
-        self.conv = nn.Conv2d(D_stim[0], D_out,  kernel_size = D_stim[1:])
+def LN_model_summary(trace, stim, nbins=30, n_testset=2000):
+    # trace = (cell id, trace)
+    # stim  = (frame, space dim)
+    # default setting for test datasets
+    # -  after training set: test
+    # - before training set: test2
+    
+    assert trace.shape[1] == stim.shape[0], "Data point number mismatch."
+    assert n_testset < 0.5*stim.shape[0], "Testset size is more than half of the training set. Too short training data or too large testset. Lower n_testset." # < half of total sampling number
+    nbins = np.ceil(nbins)
+    nbins = int(nbins)
+    print('nbins = ', nbins)
+    
+    n_cells = trace.shape[0]
+    n_subplots = 7
+    
+    # model_r definition
+    
+    model_r = model_r_init(["L","LN"], dataset=["training","test","test2"], n_cell=n_cells)
+    
+    for i in range(n_cells):
+        resp = trace[i]
+        resp_training = resp[n_testset:-n_testset:]
+        stim_training = stim[n_testset:-n_testset:]
 
-    def forward(self, x):
-        x = self.conv(x)
-        x = x.view(x.size(0), -1)    # x.size(0) = batch number
-        #x = x.view(-1, D_out)        # [batch #, output cell#]
-        #return torch.tanh(x) # For RELU, self.conv1(x).clamp(min=0) For SELU, nn.functional.selu(x)
-        #x = nn.functional.softplus(x)
-        x = torch.tanh(x)
-        # Additional conv for temporal kinetics of Ca indicator. No linear combination over channels.
-        return x
+        # Linear filter (or RF) by rev. corr.
+        rc, lags   = ft.revcorr(stim_training, resp_training, nbins)
+        
+        # Linear predictionn
+        pred_training = ft.linear_response(rc[::-1], stim_training)
+        pred_heldout = ft.linear_response(rc[::-1], stim[-n_testset:])
+        pred_heldout2 = ft.linear_response(rc[::-1], stim[:n_testset])
+        # Nonlinearity fitting
+        binterp2 = Binterp(20) # nbins for nonlinearity estimation. Binterp class object.
+        binterp2.fit(pred_training, resp_training)
+        # LN model output
+        LN_output_training_data = binterp2.predict(pred_training)
+        LN_output_heldout_data = binterp2.predict(pred_heldout)
+        LN_output_heldout_data2 = binterp2.predict(pred_heldout2)
 
-class LN_TemConv(nn.Module):
-# 2-layer model: Conv1 (over entire space) + Conv2(= FC)
-    def __init__(self, D_stim, H, D_out, temp_filter_size = 15):
-        # D_stim : [ch, dim1, dim2] e.g. [color, space, time]
-        #     H  : num of layer1 channels
-        # D_out  : num of cells (or ROIs)
+        # Figure setting
+        fig = plt.figure(figsize=(18, 2.5))
+        ax1 = plt.subplot2grid((1, n_subplots), (0,0), colspan=2)
+        ax2 = plt.subplot2grid((1, n_subplots), (0,2), colspan=1)
+        ax3 = plt.subplot2grid((1, n_subplots), (0,3), colspan=n_subplots-3)
 
-        max_space_filtering    = D_stim[1] # conv over entire space
-        k1 = [max_space_filtering, temp_filter_size] # subunit spatiotemporal filter. # [space, time] ~ [40*7 um, (1/15Hz)*6=400 ms]
-        #k2 = [D_stim[1]-max_space_filtering+1, temp_filter_size] # filter for integrating subunits.
-        k2 = [D_stim[1]-max_space_filtering+1, D_stim[2]-temp_filter_size+1] # filter for integrating subunits.
+        # Plot Linear filter
+        # cmap='seismic'
+        plt.sca(ax1)
+        rf_imshow(rc.T)
+        plt.axis('off')
 
-        super(LN_TemConv, self).__init__()
-        self.relu = nn.ReLU(inplace=True) # inplace=True: update the input directly.
-        self.softplus = nn.Softplus()
-        self.conv1 = nn.Conv2d(D_stim[0], H, kernel_size = k1)
-        self.conv2 = nn.Conv2d(H,     D_out, kernel_size = k2) # equivalent to FC layer.
+        # model r
+        model_r[i]['training']["L"] = pearsonr(resp_training, pred_training)[0]
+        model_r[i]['test']["L"]     = pearsonr(resp[-n_testset:], pred_heldout)[0]
+        model_r[i]['test2']["L"]    = pearsonr(resp[:n_testset], pred_heldout2)[0]
 
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.softplus(x)   # rectifying nonlinearity.
-        x = self.conv2(x)      # Temporal convolution.
-        # x = (batch, ch, dim1, dim2)
-        assert x.size(2) == 1 # Final dim1 (space) convolution should integrate all subunits.
-        assert x.size(3) == 1 # Final dim1 (space) convolution should integrate all subunits.
-        x = x.view(x.size(0), -1)
-        x = torch.tanh(x)     # Final nonlinearity
-        return x
-
-class CNN_2layer(nn.Module):
-# 2-layer model: Conv1 + Conv2(= FC)
-    def __init__(self, D_stim, H, D_out, temp_filter_size = 15, space_filter_size = 7, space_stride=1):
-        # D_stim : [ch, dim1, dim2] e.g. [color, space, time]
-        #     H  : num of channels (types in conv1 layer)
-        # D_out  : num of cells (or ROIs)
-
-        max_space_filtering    = space_filter_size;
-        max_temporal_filtering = temp_filter_size;
-        # filter size as tuple
-        k1 = (max_space_filtering, max_temporal_filtering) # subunit spatiotemporal filter. # [space, time] ~ [40*7 um, (1/15Hz)*6=400 ms]
-        #k2 = [D_stim[1]-max_space_filtering+1, max_temporal_filtering] # filter for integrating subunits.
-        conv1_output_space = int((D_stim[1]-max_space_filtering)/space_stride+1)
-        k2 = (conv1_output_space, D_stim[2]-max_temporal_filtering+1) # filter for integrating subunits.
+        model_r[i]['training']["LN"] = pearsonr(resp_training, LN_output_training_data)[0]
+        model_r[i]['test']["LN"]     = pearsonr(resp[-n_testset:], LN_output_heldout_data)[0]
+        model_r[i]['test2']["LN"]    = pearsonr(resp[:n_testset], LN_output_heldout_data2)[0]
         #
-        assert k2[0]%1 == 0, "Non-integer filter size probably due to the stride."
+        print('Cell %d: w/ training data (%.3f and %.3f), w/ test data (%.3f and %.3f)' 
+              %  (i+1, model_r[i]['training']["L"], model_r[i]['training']["LN"], model_r[i]['test']["L"], model_r[i]['test']["LN"]))
 
-        super(CNN_2layer, self).__init__()
-        self.name = 'CNN_2layer'
-        self.relu = nn.ReLU(inplace=True) # inplace=True: update the input directly.
-        self.softplus = nn.Softplus()
-        self.conv1 = nn.Conv2d(D_stim[0], H, k1, stride = (space_stride, 1))
-        self.conv2 = nn.Conv2d(H,     D_out, k2, stride = 1) # equivalent to FC layer.
+        # Plot 1 : Nonlinearity fitting plot (scatter & binterp)
+        model_out = pred_training
+        plt.sca(ax2)
+        plt.plot(model_out, resp_training, linestyle='none', marker='+', mew=0.5) #mec='w'
+        binterp2.plot((model_out.min(),model_out.max()), linewidth=5, label='Binterp') # axes?
+        plt.xlabel('Linear prediction')
+        #plt.ylabel(data_key)
+        ax2.set_ylim([-4,4])
+        ax2.set_xticklabels([])
 
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.softplus(x)     # rectifying nonlinearity.
-        x = self.conv2(x)    # saturating nonlinearity.
-        # x = (batch, ch, dim1, dim2)
-        assert x.size(2) == 1 # Final dim1 (space) convolution should integrate all subunits.
-        assert x.size(3) == 1 # Final dim1 (space) convolution should integrate all subunits.
-        x = x.view(x.size(0), -1)
-        x = torch.tanh(x)
-        return x
+        # Plot trace
+        LN_output_heldout_data -= np.mean(LN_output_heldout_data, axis=0)
+        LN_output_heldout_data /= np.std(LN_output_heldout_data, axis=0)
+        #fig = plt.figure()
+        #fig, ax = plt.subplots(figsize=(15,3))
+        #ax = plt.subplot2grid((n_cells, n_subplots), (i, 2), colspan=n_subplots-2)
+        plt.sca(ax3)
+        plt.plot(resp[-n_testset:], color='gray')
+        plt.plot(LN_output_heldout_data)
+        ax3.set_xlim([0, n_testset])
+        #plt.title('Heldout data vs LN model output')
+        plt.show()
+        
+    model_r_bar_plot(model_r, dataset=["training","test","test2"], models=["L","LN"])
+    #
+    return model_r#, LN_result
 
 
 #__all__ = []
