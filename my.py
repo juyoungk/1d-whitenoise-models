@@ -9,8 +9,9 @@ from pyret.nonlinearities import Binterp, RBF, Sigmoid
 from scipy.stats import sem, pearsonr
 
 
-def model_r_init(model_names, dataset=["training","test"], n_cell=1):
-# argument: model_names, dataset=["training","test"], n_cell=1
+def model_r_init(model_names, dataset=["training","val"], n_cell=1):
+    # model_r [cell index] [data set] [model_name]
+    # argument: model_names, dataset=["training","test"], n_cell=1
     values = np.zeros(len(model_names))
     model_r = [dict() for i in range(n_cell)]
 
@@ -135,61 +136,137 @@ def corr_with_rolled_stim(rolled_stim, output):
     return corr
 
 # Function for RF visualization
-def rf_imshow(rf_data):
-    # [cell id, dim1, dim2, ...]
-
-    if rf_data.ndim is 2:
-        # single cell case
-        rf_data = rf_data[None, :]
-
-    numcell = rf_data.shape[0]
-    for cell in range(numcell):
-        rf = rf_data[cell]
-        c_limit = max([abs(rf.min()), abs(rf.max())])
+def rf_imshow(rf_data, **kwargs):
+    # [d1, d2]           - Create a figrue or draw on given axis. arg 'climit' for range. 
+    # [num_cell, d1, d2] - Create a figure. Always 1-D raw image array.
+    assert rf_data.ndim < 4, "Dim >3. Too large dimention for rf visualization"
+            
+    # single cell case
+    if rf_data.ndim is 2: 
+        
+        rf = rf_data
+        
+        if 'ax' in kwargs.keys():
+            ax = kwargs.pop('ax')
+        else:
+            ax = plt.axes() # create an axis
+        
+        if 'climit' in kwargs.keys():
+            c_limit = kwargs.pop('climit')
+        else:
+            c_limit = max([abs(rf.min()), abs(rf.max())])
+            
         #plt.subplot(1, numcell, cell+1)
-        plt.imshow(rf, aspect='auto', cmap='seismic', vmin = -c_limit, vmax = c_limit)
-        cbar = plt.colorbar(ticks=[-c_limit, c_limit])
+        img = ax.imshow(rf, aspect='auto', cmap='seismic', vmin = -c_limit, vmax = c_limit)
+        cbar = plt.colorbar(img, ticks=[-c_limit, c_limit], ax=ax)
         cbar.ax.set_yticklabels(['-', '+'])
-        #plt.title('cell: %d' %(cell))
+        
+    else:
+        numcell = rf_data.shape[0]
+        # image along a row. 
+        fig, axes = plt.subplots(1, numcell, figsize=(18, 2.5))   
+        
+        for cell in range(numcell):
+            rf = rf_data[cell]
+            ax = axes[cell]
+            c_limit = max([abs(rf.min()), abs(rf.max())])
+            #plt.subplot(1, numcell, cell+1)
+            img = ax.imshow(rf, aspect='auto', cmap='seismic', vmin = -c_limit, vmax = c_limit)
+            cbar = plt.colorbar(img, ticks=[-c_limit, c_limit], ax=ax)
+            cbar.ax.set_yticklabels(['-', '+'])
+            #plt.title('cell: %d' %(cell))
 
 
-# 4D tensor visualization for pytorch model
+# 4D tensor visualization for pytorch model (e.g. for 2nd layer)
 # (out_ch, in_ch, dim1, dim2)
-def plot_kernels_in_ch_cols(tensor):
+def plot_kernels_in_ch_cols(tensor): 
     num_rows = tensor.shape[0]
     num_cols = tensor.shape[1]
-    fig = plt.figure()
-    #fig.patch.set_facecolor((1, 1, 1))
+    
+    fig, axes = plt.subplots(num_rows, num_cols, figsize=(num_cols*3, num_rows*1.5)) 
+    
     for i in range(num_rows):     # over out channels
         # set limit
-        c_limit = max([abs(tensor[i].min()), abs(tensor[i].max())])
+        climit = max([abs(tensor[i].min()), abs(tensor[i].max())])
 
         for j in range(num_cols): # over  in channels
-            ax1 = plt.subplot(num_rows, num_cols, i*num_cols + j + 1)
-            rf_imshow(tensor[i,j])
-            #ax1.imshow(tensor[i,j])
-            ax1.axis('off')
-            ax1.set_xticklabels([])
-            ax1.set_yticklabels([])
+            
+            if num_cols == 1 and num_rows == 1:
+                # For (1,1) case, ax is not subscriptable.
+                ax = axes
+            elif num_cols == 1:
+                ax = axes[i]
+            elif num_rows == 1:
+                ax = axes[j]
+            else:
+                ax = axes[i,j]    
+
+            rf_imshow(tensor[i,j], ax=ax, clmit=climit) # c_limit...!!!!???
+            ax.axis('off')
+            ax.set_xticklabels([])
+            ax.set_yticklabels([])
 
     plt.subplots_adjust(wspace=0.1, hspace=0.1)
     plt.show()
 
+    
 def plot_kernels_out_ch_cols(tensor):
 # (out_ch, in_ch, dim1, dim2)
-# plot out channels into cols
+# plot out channels into cols (e.g. 1st layer)
     num_cols = tensor.shape[0]
     num_rows = tensor.shape[1]
-    fig = plt.figure()
+    #fig = plt.figure()
     #fig.patch.set_facecolor((1, 1, 1))
+    
+    fig, axes = plt.subplots(num_rows, num_cols+1, figsize=((num_cols+1)*3, num_rows*1))
+    
     for j in range(num_rows): # over in channels
+        
+        climit = max([abs(tensor[j].min()), abs(tensor[j].max())])
+        
         for i in range(num_cols):
-            ax1 = plt.subplot(num_rows, num_cols, j*num_cols + i + 1)
-            rf_imshow(tensor[i,j])
-            #ax1.imshow(tensor[i,j])
-            ax1.axis('off')
-            ax1.set_xticklabels([])
-            ax1.set_yticklabels([])
+            #ax1 = plt.subplot(num_rows, num_cols, j*num_cols + i + 1)
+            
+            if num_cols == 1 and num_rows == 1:
+                # For (1,1) case, ax is not subscriptable.
+                ax = axes
+            elif num_cols == 1:
+                ax = axes[j]
+            elif num_rows == 1:
+                ax = axes[i]
+            else:
+                ax = axes[j,i]    
+            
+            rf_imshow(tensor[i,j], ax=ax, climit=climit)
+            ax.axis('off')
+            ax.set_xticklabels([])
+            ax.set_yticklabels([])
+            
+    # temporal profile plot
+    
+
+    
+def max_slice(img, axis=0):
+    # axis 0? Fix axis 0 (e.g. space) and slice it.
+    # Find index of abs max pixel.
+    
+    assert img.ndim is 2, "input dim should be 2."
+    assert axis < 2, "axis should be either 0 or 1."
+    
+    ind = np.unravel_index(np.argmax(abs(img)), img.shape)
+    
+    if axis is 0:
+        line = img[ind[0],:]
+        max_ind = ind[1]
+    elif axis is 1:
+        line = img[:,ind[1]]
+        max_ind = ind[0]
+    else:
+        line = []
+        max_ind = []
+        
+    return line, max_ind      
+            
 
 def model_r_bar_plot(model_r, dataset=None, models=None):
     # model_r [cell index] [data set] [model_name]
@@ -213,7 +290,8 @@ def model_r_bar_plot(model_r, dataset=None, models=None):
         if dataset is None:
             dataset = model_r[i].keys()
         if not isinstance(dataset, (list,)):
-            print('dataset argument should be ''list'', not ''str''. Try with [].')
+            if i is 1: # print only once
+                print('dataset argument should be ''list'', not ''str''. Try with [].')
         n_dataset = len(dataset)
         j = 0 # dataset
 

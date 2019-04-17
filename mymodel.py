@@ -4,6 +4,8 @@ Juyoung's models
 import torch
 import torch.nn as nn
 import time
+import my
+import matplotlib.pyplot as plt
 
 # models
 class SimpleModel(nn.Module):
@@ -11,10 +13,11 @@ class SimpleModel(nn.Module):
         # D_stim : [ch, dim1, dim2] e.g. [color, space, time]
         # D_out: # of cells (or ROIs)
         super(SimpleModel, self).__init__()
-        self.conv = nn.Conv2d(D_stim[0], D_out,  kernel_size = D_stim[1:])
+        self.n_cell = D_out
+        self.conv1 = nn.Conv2d(D_stim[0], D_out,  kernel_size = D_stim[1:])
 
     def forward(self, x):
-        x = self.conv(x)
+        x = self.conv1(x)
         x = x.view(x.size(0), -1)    # x.size(0) = batch number
         #x = x.view(-1, D_out)        # [batch #, output cell#]
         #return torch.tanh(x) # For RELU, self.conv1(x).clamp(min=0) For SELU, nn.functional.selu(x)
@@ -22,6 +25,16 @@ class SimpleModel(nn.Module):
         x = torch.tanh(x)
         # Additional conv for temporal kinetics of Ca indicator. No linear combination over channels.
         return x
+    
+    def reg_conv1_L1(self):
+        # Define regularization term for this model..
+        return self.conv1.weight.abs().sum()
+    
+    def visualize(self):
+        fig = plt.figure(figsize=(3*self.n_cell, 2)) 
+        w_conv1 = self.conv1.weight.data.cpu().numpy()
+        my.plot_kernels_out_ch_cols(w_conv1)
+
 
 class LN_TemConv(nn.Module):
 # 2-layer model: Conv1 (over entire space) + Conv2(= FC)
@@ -72,6 +85,8 @@ class CNN_2layer(nn.Module):
 
         super(CNN_2layer, self).__init__()
         self.name = 'CNN_2layer'
+        self.n_cell = D_out
+        self.num_types = H
         self.relu = nn.ReLU(inplace=True) # inplace=True: update the input directly.
         self.softplus = nn.Softplus()
         self.conv1 = nn.Conv2d(D_stim[0], H, k1, stride = (space_stride, 1))
@@ -87,3 +102,23 @@ class CNN_2layer(nn.Module):
         x = x.view(x.size(0), -1)
         x = torch.tanh(x)
         return x
+    
+    def reg_conv1_L1(self):
+        # Define regularization term for this model..
+        return self.conv1.weight.abs().sum()
+    
+    def reg_conv2_L1(self):
+        # Define regularization term for this model..
+        return self.conv2.weight.abs().sum()
+    
+    def visualize(self):
+        fig = plt.figure(figsize=(4*self.num_types, 1)) 
+        w_conv1 = self.conv1.weight.data.cpu().numpy()
+        my.plot_kernels_out_ch_cols(w_conv1)
+        
+        #plt.title('L1 reg %.1e,   L2 reg %.1e' % (coeff_L1, coeff_L2))
+        fig = plt.figure(figsize=(4*self.num_types, 2*self.n_cell)) 
+        w_conv2 = self.conv2.weight.data.cpu().numpy()
+        my.plot_kernels_in_ch_cols(w_conv2)
+        
+
