@@ -71,7 +71,7 @@ def LN_model_summary(trace, stim, nbins=30, n_testset=2000):
         # Plot Linear filter
         # cmap='seismic'
         plt.sca(ax1)
-        rf_imshow(rc.T)
+        rf_imshow(rc.T, ax=ax1)
         plt.axis('off')
 
         # model r
@@ -91,7 +91,7 @@ def LN_model_summary(trace, stim, nbins=30, n_testset=2000):
         plt.sca(ax2)
         plt.plot(model_out, resp_training, linestyle='none', marker='+', mew=0.5) #mec='w'
         binterp2.plot((model_out.min(),model_out.max()), linewidth=5, label='Binterp') # axes?
-        plt.xlabel('Linear prediction')
+        plt.xlabel('Filtered stimulus')
         #plt.ylabel(data_key)
         ax2.set_ylim([-4,4])
         ax2.set_xticklabels([])
@@ -218,7 +218,7 @@ def plot_kernels_out_ch_cols(tensor):
     #fig = plt.figure()
     #fig.patch.set_facecolor((1, 1, 1))
     
-    fig, axes = plt.subplots(num_rows, num_cols+1, figsize=(num_cols*3, num_rows*1))
+    fig, axes = plt.subplots(num_rows, num_cols+1, figsize=((num_cols+1)*3, num_rows*1))
     
     for j in range(num_rows): # over in channels
         
