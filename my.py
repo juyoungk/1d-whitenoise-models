@@ -161,9 +161,9 @@ def rf_imshow(rf_data, **kwargs):
             c_limit = max([abs(rf.min()), abs(rf.max())])
 
         #plt.subplot(1, numcell, cell+1)
-        img = ax.imshow(rf, aspect='auto', cmap='seismic', vmin = -c_limit, vmax = c_limit)
-        cbar = plt.colorbar(img, ticks=[-c_limit, c_limit], ax=ax)
-        cbar.ax.set_yticklabels(['-', '+'])
+        img = ax.imshow(rf, aspect='equal', cmap='seismic', vmin = -c_limit, vmax = c_limit)
+        #cbar = plt.colorbar(img, ticks=[-c_limit, c_limit], ax=ax)
+        #cbar.ax.set_yticklabels(['-', '+'])
 
     else:
         numcell = rf_data.shape[0]
@@ -175,9 +175,10 @@ def rf_imshow(rf_data, **kwargs):
             ax = axes[cell]
             c_limit = max([abs(rf.min()), abs(rf.max())])
             #plt.subplot(1, numcell, cell+1)
-            img = ax.imshow(rf, aspect='auto', cmap='seismic', vmin = -c_limit, vmax = c_limit)
-            cbar = plt.colorbar(img, ticks=[-c_limit, c_limit], ax=ax)
-            cbar.ax.set_yticklabels(['-', '+'])
+            rf_show(rf, ax=ax, climit=c_limit)
+            #img = ax.imshow(rf, aspect='auto', cmap='seismic', vmin = -c_limit, vmax = c_limit)
+            #cbar = plt.colorbar(img, ticks=[-c_limit, c_limit], ax=ax)
+            #cbar.ax.set_yticklabels(['-', '+'])
             #plt.title('cell: %d' %(cell))
 
 
