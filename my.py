@@ -142,8 +142,13 @@ def corr_with_rolled_stim(rolled_stim, output):
 # Function for 2D RF visualization
 def rf_imshow(rf_data, **kwargs):
     # [d1, d2]           - Create a figrue or draw on given axis. arg 'climit' for range.
-    # [num_cell, d1, d2] - Create a figure. Always 1-D raw image array.
+    # [num_cell, d1, d2] - Create a figure for multi-channel images.
     assert rf_data.ndim < 4, "Dim >3. Too large dimention for rf visualization"
+
+    if 'cmap' in kwargs.keys():
+        cmap = kwargs.pop('cmap')
+    else:
+        cmap = 'seismic'
 
     # single cell case
     if rf_data.ndim is 2:
@@ -157,41 +162,46 @@ def rf_imshow(rf_data, **kwargs):
 
         if 'climit' in kwargs.keys():
             c_limit = kwargs.pop('climit')
+            #print(c_limit, ', normalized.')
         else:
             c_limit = max([abs(rf.min()), abs(rf.max())])
-
+            #print(c_limit, ', not normalized.')
+            
         #plt.subplot(1, numcell, cell+1)
-        img = ax.imshow(rf, aspect='equal', cmap='seismic', vmin = -c_limit, vmax = c_limit)
+        img = ax.imshow(rf, aspect='equal', cmap=cmap, vmin = -c_limit, vmax = c_limit)
         #cbar = plt.colorbar(img, ticks=[-c_limit, c_limit], ax=ax)
         #cbar.ax.set_yticklabels(['-', '+'])
 
     else:
         numcell = rf_data.shape[0]
         # image along a row.
-        fig, axes = plt.subplots(1, numcell, figsize=(18, 2.5))
+        fig, axes = plt.subplots(1, numcell, figsize=(2*numcell, 2))
 
         for cell in range(numcell):
             rf = rf_data[cell]
             ax = axes[cell]
             c_limit = max([abs(rf.min()), abs(rf.max())])
             #plt.subplot(1, numcell, cell+1)
-            rf_show(rf, ax=ax, climit=c_limit)
+            rf_imshow(rf, ax=ax, climit=c_limit, cmap=cmap)
             #img = ax.imshow(rf, aspect='auto', cmap='seismic', vmin = -c_limit, vmax = c_limit)
             #cbar = plt.colorbar(img, ticks=[-c_limit, c_limit], ax=ax)
             #cbar.ax.set_yticklabels(['-', '+'])
             #plt.title('cell: %d' %(cell))
+            ax.axis('off')
+        plt.subplots_adjust(wspace=0.1, hspace=0.1)
 
 
 # 4D tensor visualization for pytorch model (e.g. for 2nd layer)
 # (out_ch, in_ch, dim1, dim2)
 def plot_kernels_in_ch_cols(tensor):
-    num_rows = tensor.shape[0]
-    num_cols = tensor.shape[1]
+    num_rows = tensor.shape[0] # out channels in row
+    num_cols = tensor.shape[1] # in channels in col
 
-    fig, axes = plt.subplots(num_rows, num_cols, figsize=(num_cols*3, num_rows*1.5))
-
+    fig, axes = plt.subplots(num_rows, num_cols, figsize=(num_cols*1.5, num_rows*1.5))
+    #climit = max([abs(tensor.min()), abs(tensor.max())])
+    
     for i in range(num_rows):     # over out channels
-        # set limit
+        # set limit over given out channel
         climit = max([abs(tensor[i].min()), abs(tensor[i].max())])
 
         for j in range(num_cols): # over  in channels
@@ -204,16 +214,15 @@ def plot_kernels_in_ch_cols(tensor):
             elif num_rows == 1:
                 ax = axes[j]
             else:
-                ax = axes[i,j]
+                ax = axes[i,j] # i-> roi, j->col
 
-            rf_imshow(tensor[i,j], ax=ax, clmit=climit) # c_limit...!!!!???
+            my.rf_imshow(tensor[i,j], ax=ax, climit=climit)
             ax.axis('off')
             ax.set_xticklabels([])
             ax.set_yticklabels([])
 
     plt.subplots_adjust(wspace=0.1, hspace=0.1)
     plt.show()
-
 
 def plot_kernels_out_ch_cols(tensor):
 # (out_ch, in_ch, dim1, dim2)
